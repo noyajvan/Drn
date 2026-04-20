@@ -1,0 +1,27 @@
+[package]
+name = "esp32-s3-super-mini-rhai"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.88"
+
+[dependencies]
+esp-hal = { version = "1.0", features = ["esp32s3", "unstable"] }
+esp-backtrace = { version = "0.14", features = ["esp32s3", "panic-handler", "println"] }
+esp-println = { version = "0.12", features = ["esp32s3", "log"] }
+esp-alloc = "0.6"
+
+rhai = { version = "1.19", default-features = false, features = ["no_std", "f32_float", "only_i64"] }
+
+[profile.dev]
+opt-level = 1
+debug = true
+
+[profile.release]
+opt-level = "s"
+lto = true
+codegen-units = 1
+debug = true
+panic = "abort"
+
+[profile.dev.build-override]
+opt-level = 3

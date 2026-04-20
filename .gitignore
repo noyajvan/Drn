@@ -1,0 +1,41 @@
+# Build artifacts
+/target
+**/target/
+*.rs.bk
+
+# Cargo
+Cargo.lock.bak
+
+# IDE / Editor
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# Zed (keep shared settings, ignore local caches if any)
+.zed/cache/
+.zed/sessions/
+
+# Environment / secrets
+.env
+.env.local
+*.pem
+*.key
+
+# ESP / espflash
+*.bin.bak
+*.elf.bak
+espflash.log
+
+# Python (for esptool)
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# OS
+desktop.ini
