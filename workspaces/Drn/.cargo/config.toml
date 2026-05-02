@@ -1,0 +1,14 @@
+"# .cargo/config.toml
+# Налаштування компіляції для ESP32-S3 (std + esp-idf)
+
+[build]
+target = \"xtensa-esp32s3-espidf\"
+jobs = 8
+
+[target.xtensa-esp32s3-espidf]
+linker = \"xtensa-esp32s3-elf-gcc\"
+rustflags = [
+    # Оптимізація розміру
+    \"-C\", \"opt-level=s\",
+]
+"

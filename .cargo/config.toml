@@ -1,15 +1,24 @@
+# .cargo/config.toml
+# Налаштування компіляції для ESP32-S3 (no_std + embassy + esp-hal)
+# esp-hal генерує власний linkall.x — memory.x не потрібен
+
 [build]
 target = "xtensa-esp32s3-none-elf"
+# Use sccache as a compiler wrapper to speed up rebuilds
+ # rustc-wrapper = "sccache"  # Вимкнено через помилку пошуку rustc у sccache
+jobs = 8  # parallel build jobs to utilize all CPU cores and speed up compilation
 
 [target.xtensa-esp32s3-none-elf]
-runner = "espflash flash --monitor"
+# Linker для Xtensa ESP32-S3
+linker = "xtensa-esp32s3-elf-gcc"
 rustflags = [
-    "-C", "link-arg=-nostartfiles",
-    "-C", "link-arg=-Wl,-Tlinkall.x",
+    # esp-hal генерує linkall.x автоматично
+    "-C", "link-arg=-Tlinkall.x",
+    # Оптимізація розміру (критично для flash)
+    "-C", "opt-level=s",
 ]
 
 [unstable]
+# Дозволити нестабільні фічі для no_std embassy
 build-std = ["core", "alloc"]
-
-[env]
-ESP_LOG = "info"
+build-std-features = ["compiler-builtins-mem"]

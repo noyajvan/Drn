@@ -1,222 +1,106 @@
-# ESP32-S3 Super Mini + Rhai
+# ESP32-S3 Super Mini — Rhai Firmware (no_std + embassy)
 
-Встраиваемая среда скриптинга **Rhai** на плате **ESP32-S3 Super Mini**, написанная на Rust (`no_std`, bare-metal).
+Каркас прошивки для **ESP32-S3 Super Mini** з підтримкою скриптів Rhai, MAVLink, WiFi та LittleFS.
 
-Проект демонстрирует, как запустить интерпретатор Rhai на микроконтроллере и регистрировать в нём нативные Rust-функции (включая работу с аппаратурой — например, аппаратным RNG).
+## Апаратна специфікація (ESP32-S3 Super Mini)
 
----
+| Параметр | Значення |
+|----------|----------|
+| Flash | 4 MB (QIO) |
+| PSRAM | Немає |
+| RGB LED | GPIO48 (WS2812B, 1 піксель, GRB порядок) |
+| BOOT кнопка | GPIO0 (LOW = Safe Mode) |
+| USB-CDC | Native USB (не CH340) |
+| I2C SDA | GPIO8 |
+| I2C SCL | GPIO9 |
+| UART TX | GPIO5 (MAVLink) |
+| UART RX | GPIO6 (MAVLink) |
 
-## 🧩 Возможности
-
-- ✅ `no_std` Rust на ESP32-S3 (Xtensa, bare-metal)
-- ✅ Интерпретатор [Rhai](https://rhai.rs) с `no_std` поддержкой
-- ✅ Динамическое выделение памяти через `esp-alloc`
-- ✅ Вывод через `esp-println` (UART0)
-- ✅ Регистрация нативных функций в Rhai (`log`, `double`, `add`, `random`)
-- ✅ Пример использования аппаратного RNG ESP32-S3 из Rhai-скрипта
-- ✅ Облачная сборка через GitHub Actions (без установки ESP toolchain локально)
-
----
-
-## 📦 Зависимости
+## Архітектура
 
 ```
-esp-hal       = 1.0     (esp32s3, unstable)
-esp-backtrace = 0.14    (panic-handler, println)
-esp-println   = 0.12    (log)
-esp-alloc     = 0.6
-rhai          = 1.19    (no_std, f32_float, only_i64)
+src/
+├── main.rs              # Точка входу, State Machine (BOOT_MODE / RUN_MODE)
+├── init_peripherals.rs  # Ініціалізація GPIO, I2C, UART, deep sleep
+├── init_rhai.rs         # Глобальний рушій Rhai (StaticCell), esp-println
+├── rhai_bridge.rs       # Hardware API для Rhai: gpio, i2c, uart, sleep, mavlink
+└── mavlink_handler.rs   # Async task: читання UART, парсинг MAVLink, Signal
+
+examples/
+└── test_led.rhai        # Тестовий скрипт: мигання RGB + print()
 ```
 
----
-
-## ☁️ Сборка в облаке (рекомендуется)
-
-Локально устанавливать ESP toolchain не нужно — всё собирается в **GitHub Actions**.
-
-### 1. Создай репозиторий на GitHub
+## Встановлення toolchain
 
 ```bash
-git init
-git add .
-git commit -m "Initial commit"
-git branch -M main
-git remote add origin https://github.com/<USER>/esp32-s3-super-mini-rhai.git
-git push -u origin main
+# 1. Встановити espup (менеджер Xtensa toolchain)
+cargo install espup
+
+# 2. Встановити Xtensa Rust toolchain
+espup install
+
+# 3. Активувати змінні середовища
+. $HOME/export-esp.sh
+
+# 4. Перевірити
+rustup show
 ```
 
-### 2. Запусти сборку
-
-Workflow `.github/workflows/build.yml` запускается автоматически при каждом `push` в `main` / `master`, а также вручную через вкладку **Actions → Build ESP32-S3 Firmware → Run workflow**.
-
-### 3. Скачай прошивку
-
-После завершения сборки в разделе **Actions → <run> → Artifacts** будут доступны:
-
-- `esp32s3-firmware-elf` — ELF-файл (для отладки)
-- `esp32s3-firmware-bin` — готовая прошивка `firmware-esp32s3.bin`
-
-### 4. Автоматический release
-
-Если создать git-тег вида `v*.*.*`, workflow автоматически опубликует **GitHub Release** с приложенной прошивкой:
+## Компіляція
 
 ```bash
-git tag v0.1.0
-git push origin v0.1.0
-```
+# Перевірка без лінкування
+cargo check
 
----
-
-## 🔌 Прошивка платы
-
-После того как скачал `firmware-esp32s3.bin` из artifacts:
-
-### Вариант 1: через `espflash`
-
-```bash
-cargo install espflash
-espflash flash --chip esp32s3 --monitor firmware-esp32s3.bin
-```
-
-### Вариант 2: через `esptool.py`
-
-```bash
-pip install esptool
-esptool.py --chip esp32s3 --port COM3 --baud 921600 write_flash 0x0 firmware-esp32s3.bin
-```
-
-> На Linux/macOS порт обычно `/dev/ttyUSB0` или `/dev/ttyACM0`.
-> На Windows — `COM3`, `COM4` и т.п. (смотри в Диспетчере устройств).
-
----
-
-## 💻 Локальная сборка (опционально)
-
-Если всё же хочешь собирать локально:
-
-### 1. Установи ESP toolchain
-
-```bash
-cargo install espup --locked
-espup install --targets esp32s3
-```
-
-### 2. Активируй окружение
-
-**Linux / macOS:**
-```bash
-source $HOME/export-esp.sh
-```
-
-**Windows (PowerShell):**
-```powershell
-. $env:USERPROFILE\export-esp.ps1
-```
-
-### 3. Собери проект
-
-```bash
+# Збірка
 cargo build --release
+
+# Прошивка через espflash
+cargo install espflash
+espflash flash --monitor target/xtensa-esp32s3-none-elf/release/esp32_s3_rhai
 ```
 
-### 4. Прошей плату
+## State Machine
 
-```bash
-cargo run --release
-```
+| Стан | Умова | Дія |
+|------|-------|-----|
+| `BOOT_MODE` | GPIO0 = LOW при старті | HTTP сервер для налаштування |
+| `RUN_MODE` | GPIO0 = HIGH | Виконання `script.rhai` з LittleFS |
+| `FALLBACK` | Помилка Rhai | Відкат на `backup.rhai` |
 
-> Требуется **~5–10 ГБ** свободного места на диске для компиляции.
-
----
-
-## 📂 Структура проекта
-
-```
-esp32-s3-super-mini-rhai/
-├── .cargo/
-│   └── config.toml              # target = xtensa-esp32s3-none-elf
-├── .github/
-│   └── workflows/
-│       └── build.yml            # GitHub Actions workflow
-├── src/
-│   └── main.rs                  # основной код + Rhai-скрипт
-├── Cargo.toml                   # зависимости
-└── README.md
-```
-
----
-
-## 📜 Пример Rhai-скрипта (встроен в `main.rs`)
+## Rhai API
 
 ```rhai
-print("Hello from Rhai running on ESP32-S3!");
+// Затримка
+sleep(500);          // 500 мс
 
-let x = 21;
-let y = double(x);
-log("2 * 21 = " + y.to_string());
+// GPIO
+pin_mode(2, "output");
+rgb(255, 0, 0);      // RGB LED
 
-let sum = add(15, 27);
-log("15 + 27 = " + sum.to_string());
+// I2C
+i2c_write(0x68, [0x01, 0x02]);
+let data = i2c_read(0x68, 6);
 
-let rnd = random();
-log("Random value from ESP32 RNG: " + rnd.to_string());
+// UART
+uart_write("hello");
+let s = uart_read();
 
-let result = if sum > 40 { "greater than 40" } else { "not greater" };
-log("Script evaluation result: " + result);
+// WiFi
+wifi("SSID", "password");
 
-"Script execution completed successfully!"
+// MAVLink
+let armed = is_armed();
+let pitch = get_pitch();  // mrad * 1000 (i32)
 ```
 
-### Зарегистрированные в Rhai функции
+## Залежності (Cargo.toml)
 
-| Функция       | Описание                                     |
-|---------------|----------------------------------------------|
-| `log(msg)`    | Вывод сообщения через `esp-println`          |
-| `double(n)`   | Возвращает `n * 2`                           |
-| `add(a, b)`   | Возвращает `a + b`                           |
-| `random()`    | Случайное число от аппаратного RNG ESP32-S3  |
-
----
-
-## 🔧 Аппаратура
-
-- **Плата:** ESP32-S3 Super Mini
-- **Чип:** ESP32-S3 (Xtensa LX7, dual-core, 240 MHz)
-- **Flash:** 4–8 МБ
-- **PSRAM:** опционально
-- **USB:** USB-C (встроенный USB-serial)
-
-### Пины (типовая распиновка Super Mini)
-
-| Функция   | GPIO |
-|-----------|------|
-| LED       | 48   |
-| BOOT      | 0    |
-| UART0 TX  | 43   |
-| UART0 RX  | 44   |
-
----
-
-## 🚀 Идеи для расширения
-
-- [ ] Управление GPIO из Rhai (`gpio_high(n)`, `gpio_low(n)`)
-- [ ] Чтение ADC из Rhai
-- [ ] I2C / SPI драйверы, экспонированные в Rhai
-- [ ] Wi-Fi + HTTP-клиент
-- [ ] Загрузка Rhai-скриптов из SPIFFS / LittleFS
-- [ ] REPL через UART (отправляешь Rhai-строку — получаешь результат)
-- [ ] MQTT-мост: скрипты реагируют на сообщения
-
----
-
-## 📄 Лицензия
-
-MIT OR Apache-2.0
-
----
-
-## 🙏 Благодарности
-
-- [esp-rs](https://github.com/esp-rs) — Rust on ESP
-- [Rhai](https://rhai.rs) — embedded scripting language for Rust
-- [Espressif](https://www.espressif.com) — за отличные чипы
+- `embassy-executor` — async runtime
+- `embassy-time` — таймери
+- `embassy-sync` — Signal/Channel між задачами
+- `rhai` — скриптовий рушій (f32, only_i32, no_std)
+- `littlefs2` — файлова система у flash
+- `esp-wifi` — WiFi драйвер
+- `esp-println` — вивід у USB-UART
+- `mavlink` — MAVLink протокол

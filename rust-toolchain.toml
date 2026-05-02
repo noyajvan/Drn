@@ -1,0 +1,13 @@
+# rust-toolchain.toml
+# Xtensa ESP32-S3 потребує спеціального форку Rust від Espressif
+# Встановлення: cargo install espup && espup install
+
+[toolchain]
+# esp — спеціальний канал від espressif з підтримкою Xtensa
+channel = "esp"
+# Компоненти для розробки з std
+components = ["rust-src", "rustfmt", "clippy"]
+# Targets для ESP32-S3
+targets = [
+    "xtensa-esp32s3-espidf",     # std (esp-idf)
+]

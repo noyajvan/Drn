@@ -39,3 +39,8 @@ venv/
 
 # OS
 desktop.ini
+
+# Игнорируем настройки Continue и секретные ключи
+.continue/
+config.yaml
+config.json.continue/config.yaml

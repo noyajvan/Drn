@@ -1,124 +1,51 @@
-#![no_std]
-#![no_main]
+We need to apply the suggested edit to the original code. The suggested edit shows modifications to the `main.rs` file. The original code uses `esp_idf_sys::xTaskCreatePinnedToCore` with function pointers and raw FFI. The suggested edit replaces that with `std::thread::spawn` plus `thread_pin_to_core` and removes the `xTaskCreatePinnedToCore` approach. Also, the suggested edit changes comments, changes imports, and basically simplifies.
 
-use esp_alloc as _;
-use esp_backtrace as _;
-use esp_hal::{clock::CpuClock, delay::Delay, main, rng::Rng};
-use esp_println::println;
-use rhai::{Dynamic, Engine, Scope};
+We must output the complete modified file, exactly as the suggested edit, but note that the suggested edit says "// Заглушка — позже вызов mavlink_handler::run();" and "// Заглушка — позже вызов rhai_engine::run();". That is placeholder. However, the original code had mavlink_handler::run_mavlink_task and rhai_engine::run_rhai_task as function pointers. The suggested edit likely intends to later call those functions directly within the thread closures. But the suggested edit code as shown does not actually call them; it has comments as placeholders. The instruction: "Apply the SUGGESTED EDIT to the ORIGINAL CODE. Output the complete modified file." So we should output the modified file exactly as the suggested edit shows. The modifications are: remove diff line markers, show the final code. The suggested edit is a code block with `// src/main.rs` at top, then the full file content. We should output that entire file as the modified code. It includes everything from `use std::sync::Arc;` to the end. But note: the original code had some comments like `// Global states (link-time initialized because they're in shared_state.rs) // We'll just use them directly.` which are not in the suggested edit. The suggested edit completely replaces the file. So the output should be the suggested edit content.
 
-extern crate alloc;
+Check for any missing parts. The suggested edit includes only the code from the block. It includes the `fn main()` function with `thread_pin_to_core` calls. It does not include the original's `core0_thread.join().ok();` but uses `core0_handle.join().ok();`. The original had `thread::Builder` with stack size, but the suggested edit just `std::thread::spawn`. So we output the suggested edit exactly.
 
-fn init_heap() {
-    const HEAP_SIZE: usize = 72 * 1024;
-    static mut HEAP: [u8; HEAP_SIZE] = [0; HEAP_SIZE];
+Thus, final answer is the code block, without any additional text.```rust
+// src/main.rs
+// ESP32-S3 Super Mini — FreeRTOS + std
+// Core0: MAVLink handler (UART/SocketCAN)
+// Core1: Rhai engine + Telegram bot + Firebase logger
 
-    unsafe {
-        #[allow(static_mut_refs)]
-        esp_alloc::HEAP.add_region(esp_alloc::HeapRegion::new(
-            HEAP.as_mut_ptr(),
-            HEAP_SIZE,
-            esp_alloc::MemoryCapability::Internal.into(),
-        ));
-    }
-    println!("Heap initialized: {} bytes available", HEAP_SIZE);
-}
+use std::sync::Arc;
+use anyhow::Result;
+use log::info;
+use esp_idf_svc::sys::{self as esp_idf_sys, ThreadSpawnConfiguration};
+use esp_idf_svc::hal::task::thread_pin_to_core;
+mod shared_state;
+mod mavlink_handler;
+mod rhai_engine;
+mod telegram_bot;
+mod firebase_logger;
 
-// Simple function to register with Rhai - logs a message
-fn rhai_log(message: &str) {
-    println!("[Rhai] {}", message);
-}
+use shared_state::{
+    LedState, MavlinkState, CommandState, FirebaseState,
+    MAVLINK_STATE, COMMAND_STATE, FIREBASE_STATE, LED_STATE,
+};
 
-fn rhai_double(n: i64) -> i64 {
-    n * 2
-}
+fn main() -> Result<()> {
+    esp_idf_svc::sys::link_patches();
+    esp_idf_svc::log::EspLogger::initialize_default();
+    info!("ESP32-S3 Rhai+MAVLink firmware starting...");
 
-fn rhai_add(a: i64, b: i64) -> i64 {
-    a + b
-}
-
-#[main]
-fn main() -> ! {
-    let config = esp_hal::Config::default().with_cpu_clock(CpuClock::max());
-    let peripherals = esp_hal::init(config);
-
-    // Initialize delay
-    let delay = Delay::new();
-
-    // Initialize RNG (useful for Rhai if needed)
-    let _ = peripherals.RNG;
-    let mut rng = Rng::new();
-
-    println!("\n\n");
-    println!("========================================");
-    println!(" ESP32-S3 Super Mini + Rhai v0.1.0     ");
-    println!(" Embedded Scripting Environment        ");
-    println!("========================================");
-    println!();
-
-    // Initialize the heap for Rhai (which requires dynamic allocation)
-    init_heap();
-
-    // Create Rhai scripting engine
-    let mut engine = Engine::new();
-    let mut scope = Scope::new();
-
-    // Register native Rust functions with the Rhai engine
-    engine.register_fn("log", rhai_log);
-    engine.register_fn("double", rhai_double);
-    engine.register_fn("add", rhai_add);
-
-    // Register a function that uses the hardware (example: get random number)
-    engine.register_fn("random", move || -> i64 {
-        let random_value = rng.random();
-        random_value as i64
+    // Pin Core0 thread (Protocol CPU) — MAVLink
+    let core0_handle = std::thread::spawn(move || {
+        thread_pin_to_core(0);
+        info!("MAVLink handler pinned to Core0");
+        // Заглушка — позже вызов mavlink_handler::run();
     });
 
-    println!("Rhai engine initialized successfully!");
-    println!("Registered functions: log(), double(), add(), random()");
-    println!();
+    // Pin Core1 thread (Application CPU) — Rhai + Telegram + Firebase
+    let core1_handle = std::thread::spawn(move || {
+        thread_pin_to_core(1);
+        info!("Rhai engine pinned to Core1");
+        // Заглушка — позже вызов rhai_engine::run();
+    });
 
-    // Sample Rhai script to demonstrate capabilities
-    let script = r#"
-        print("Hello from Rhai running on ESP32-S3!");
-
-        let x = 21;
-        let y = double(x);
-        log("2 * 21 = " + y.to_string());
-
-        let sum = add(15, 27);
-        log("15 + 27 = " + sum.to_string());
-
-        let rnd = random();
-        log("Random value from ESP32 RNG: " + rnd.to_string());
-
-        let result = if sum > 40 { "greater than 40" } else { "not greater" };
-        log("Script evaluation result: " + result);
-
-        "Script execution completed successfully!"
-    "#;
-
-    println!("Executing sample Rhai script...");
-    match engine.eval_with_scope::<Dynamic>(&mut scope, script) {
-        Ok(result) => {
-            println!("Rhai script returned: {:?}", result);
-        }
-        Err(e) => {
-            println!("Rhai script error: {}", e);
-        }
-    }
-
-    println!();
-    println!("Rhai runtime is now active.");
-    println!("You can extend this with GPIO control, sensors, WiFi, etc.");
-    println!("Heartbeat started - the board is running Rhai scripts!");
-
-    let mut counter = 0u32;
-
-    loop {
-        counter += 1;
-
-        println!("ESP32-S3 heartbeat #{} - Rhai engine ready", counter);
-        delay.delay_millis(2500);
-    }
+    core0_handle.join().ok();
+    core1_handle.join().ok();
+    Ok(())
 }
